@@ -1,0 +1,187 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum TaxType {
+  SALES_TAX
+  INCOME_TAX
+  VAT
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  MOBILE_WALLET
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum StockMovementType {
+  ADJUSTMENT
+  SALE
+  PURCHASE
+  RETURN
+}
+
+// Core Models
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model TaxRate {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      TaxType
+  rate      Decimal   // percentage e.g., 17.000
+  isDefault Boolean   @default(false)
+  products  Product[]
+  items     ReceiptItem[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id                Int              @id @default(autoincrement())
+  sku               String           @unique
+  name              String
+  description       String?
+  categoryId        Int?
+  category          Category?        @relation(fields: [categoryId], references: [id])
+  price             Decimal
+  cost              Decimal?
+  taxRateId         Int?
+  taxRate           TaxRate?         @relation(fields: [taxRateId], references: [id])
+  inventoryQuantity Int              @default(0)
+  status            ProductStatus    @default(ACTIVE)
+  items             ReceiptItem[]
+  stockMovements    StockMovement[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+model Customer {
+  id         Int          @id @default(autoincrement())
+  name       String
+  phone      String?
+  email      String?
+  taxId      String? // NTN or CNIC
+  type       CustomerType @default(INDIVIDUAL)
+  address    String?
+  city       String?
+  receipts   Receipt[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Receipt {
+  id            Int            @id @default(autoincrement())
+  number        String         @unique
+  date          DateTime       @default(now())
+  customerId    Int?
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  subtotal      Decimal
+  discount      Decimal        @default(0)
+  taxAmount     Decimal        @default(0)
+  total         Decimal
+  paymentStatus PaymentStatus  @default(UNPAID)
+
+  items         ReceiptItem[]
+  payments      Payment[]
+
+  // FBR integration fields
+  fbrInvoiceId  String?
+  fbrStatus     String? // e.g., SUBMITTED, FAILED, VERIFIED
+  fbrQrText     String?
+
+  pdfPath       String?
+
+  logs          FbrLog[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model ReceiptItem {
+  id          Int       @id @default(autoincrement())
+  receiptId   Int
+  receipt     Receipt   @relation(fields: [receiptId], references: [id])
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Decimal
+  lineTotal   Decimal
+  taxRateId   Int?
+  taxRate     TaxRate?  @relation(fields: [taxRateId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model Payment {
+  id          Int           @id @default(autoincrement())
+  receiptId   Int
+  receipt     Receipt       @relation(fields: [receiptId], references: [id])
+  method      PaymentMethod
+  amount      Decimal
+  reference   String?
+  createdAt   DateTime      @default(now())
+}
+
+model StockMovement {
+  id          Int               @id @default(autoincrement())
+  productId   Int
+  product     Product           @relation(fields: [productId], references: [id])
+  quantity    Int
+  type        StockMovementType
+  note        String?
+  createdAt   DateTime          @default(now())
+}
+
+model FbrLog {
+  id           Int       @id @default(autoincrement())
+  receiptId    Int?
+  receipt      Receipt?  @relation(fields: [receiptId], references: [id])
+  success      Boolean   @default(false)
+  statusCode   Int?
+  requestBody  Json?
+  responseBody Json?
+  createdAt    DateTime  @default(now())
+}
+
+model Setting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
